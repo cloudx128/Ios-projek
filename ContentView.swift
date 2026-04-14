@@ -336,7 +336,6 @@ struct CustomMarkdownView: View {
                     }
                 case .table(let rows):
                     ScrollView(.horizontal, showsIndicators: false) {
-                        // Menggunakan VStack dan HStack sebagai pengganti Grid (Dukungan penuh untuk iOS 15+)
                         VStack(alignment: .leading, spacing: 1) {
                             ForEach(0..<rows.count, id: \.self) { rIndex in
                                 HStack(spacing: 1) {
