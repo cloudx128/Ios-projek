@@ -285,7 +285,6 @@ struct ContentView: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
-    @State private var webViewHeight: CGFloat = 30
     
     var body: some View {
         HStack {
@@ -301,11 +300,11 @@ struct MessageBubble: View {
                     .cornerRadius(20, corners: [.topLeft, .topRight, .bottomLeft])
                     .frame(maxWidth: 600, alignment: .trailing)
             } else {
-                HTMLMarkdownWebView(markdown: message.text, dynamicHeight: $webViewHeight)
-                    .frame(height: webViewHeight)
+                CustomMarkdownView(text: message.text)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(Color(.systemGray5))
+                    .foregroundColor(.primary)
                     .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
                     .frame(maxWidth: 600, alignment: .leading)
             }
@@ -314,121 +313,161 @@ struct MessageBubble: View {
         }
     }
 }
-struct HTMLMarkdownWebView: UIViewRepresentable {
-    let markdown: String
-    @Binding var dynamicHeight: CGFloat
+
+enum MessageBlock: Hashable {
+    case text(String)
+    case table([[String]])
+}
+
+struct CustomMarkdownView: View {
+    let text: String
     
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.userContentController.add(context.coordinator, name: "heightHandler")
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.navigationDelegate = context.coordinator
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        return webView
-    }
-    
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        let escapedMarkdown = markdown
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "`", with: "\\`")
-            .replacingOccurrences(of: "$", with: "\\$")
-        
-        let htmlString = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-        <style>
-            :root { color-scheme: light dark; }
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                font-size: 16px;
-                line-height: 1.5;
-                color: var(--text-color);
-                padding: 0;
-                margin: 0;
-            }
-            @media (prefers-color-scheme: dark) {
-                :root { --text-color: #ffffff; --border-color: #444; --bg-code: #2e2e2e; }
-            }
-            @media (prefers-color-scheme: light) {
-                :root { --text-color: #000000; --border-color: #ccc; --bg-code: #f6f8fa; }
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-bottom: 20px;
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-            th, td {
-                border: 1px solid var(--border-color);
-                padding: 10px;
-                text-align: left;
-            }
-            th { font-weight: 600; background-color: rgba(128, 128, 128, 0.1); }
-            code {
-                background: var(--bg-code);
-                padding: 2px 4px;
-                border-radius: 4px;
-                font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-            }
-            pre code {
-                display: block;
-                padding: 10px;
-                overflow-x: auto;
-                white-space: pre;
-            }
-        </style>
-        </head>
-        <body>
-        <div id="content"></div>
-        <script>
-            document.getElementById('content').innerHTML = marked.parse(`\\(escapedMarkdown)`);
-            setTimeout(function() {
-                window.webkit.messageHandlers.heightHandler.postMessage(document.body.scrollHeight);
-            }, 150); // Jeda aman untuk memastikan semua gambar/tabel sudah dirender
-        </script>
-        </body>
-        </html>
-        """
-        webView.loadHTMLString(htmlString, baseURL: nil)
-    }
-    
-    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        var parent: HTMLMarkdownWebView
-        
-        init(_ parent: HTMLMarkdownWebView) {
-            self.parent = parent
-        }
-        
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            webView.evaluateJavaScript("document.body.scrollHeight") { height, _ in
-                if let newHeight = height as? CGFloat, newHeight > 10 {
-                    DispatchQueue.main.async {
-                        self.parent.dynamicHeight = newHeight
+    var body: some View {
+        let blocks = parseMessageBlocks(text)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(0..<blocks.count, id: \.self) { index in
+                switch blocks[index] {
+                case .text(let content):
+                    VStack(alignment: .leading, spacing: 6) {
+                        let lines = content.components(separatedBy: "\n")
+                        ForEach(0..<lines.count, id: \.self) { lIndex in
+                            let line = lines[lIndex]
+                            if let list = parseListItem(line) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text(list.symbol)
+                                        .font(.system(size: 16, weight: list.symbol == "•" ? .bold : .medium))
+                                    if let attrString = try? AttributedString(markdown: list.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                        Text(attrString)
+                                            .font(.system(size: 16))
+                                            .lineSpacing(4)
+                                    } else {
+                                        Text(list.text)
+                                            .font(.system(size: 16))
+                                            .lineSpacing(4)
+                                    }
+                                }
+                                .padding(.leading, CGFloat(list.indentSpaces) * 6)
+                            } else {
+                                if let attrString = try? AttributedString(markdown: line, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                    Text(attrString)
+                                        .font(.system(size: 16))
+                                        .lineSpacing(4)
+                                } else {
+                                    Text(line)
+                                        .font(.system(size: 16))
+                                        .lineSpacing(4)
+                                }
+                            }
+                        }
+                    }
+                case .table(let rows):
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(0..<rows.count, id: \.self) { rIndex in
+                                HStack(spacing: 1) {
+                                    ForEach(0..<rows[rIndex].count, id: \.self) { cIndex in
+                                        let cellText = rows[rIndex][cIndex]
+                                        let cellView = Group {
+                                            if let attrString = try? AttributedString(markdown: cellText, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                                Text(attrString)
+                                            } else {
+                                                Text(cellText)
+                                            }
+                                        }
+                                        
+                                        cellView
+                                            .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            // fixedSize memastikan tulisan yang kepanjangan membungkus ke baris baru, bukan menghilang (...)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: 250, maxHeight: .infinity, alignment: .topLeading)
+                                            .background(Color(.systemBackground))
+                                    }
+                                }
+                            }
+                        }
+                        .background(Color.gray.opacity(0.3))
+                        .overlay(Rectangle().stroke(Color.gray.opacity(0.3), lineWidth: 1))
                     }
                 }
             }
         }
+    }
+    
+    struct ListItem {
+        let symbol: String
+        let text: String
+        let indentSpaces: Int
+    }
+    
+    func parseListItem(_ line: String) -> ListItem? {
+        var spaces = 0
+        for char in line {
+            if char == " " || char == "\t" { spaces += 1 } else { break }
+        }
         
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            if message.name == "heightHandler", let height = message.body as? CGFloat {
-                DispatchQueue.main.async {
-                    self.parent.dynamicHeight = height
-                }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        
+        if trimmed.hasPrefix("* ") || trimmed.hasPrefix("- ") {
+            let textIdx = trimmed.index(trimmed.startIndex, offsetBy: 2)
+            return ListItem(symbol: "•", text: String(trimmed[textIdx...]), indentSpaces: spaces)
+        }
+        
+        if let spaceIdx = trimmed.firstIndex(of: " ") {
+            let prefix = String(trimmed[..<spaceIdx])
+            if prefix.hasSuffix(".") && Int(prefix.dropLast()) != nil {
+                let text = String(trimmed[trimmed.index(after: spaceIdx)...])
+                return ListItem(symbol: prefix, text: text, indentSpaces: spaces)
             }
         }
+        return nil
+    }
+    
+    func parseMessageBlocks(_ text: String) -> [MessageBlock] {
+        var blocks: [MessageBlock] = []
+        let lines = text.components(separatedBy: "\n")
+        var currentText = ""
+        var currentTable: [[String]] = []
+        var isParsingTable = false
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("|") && trimmed.hasSuffix("|") && trimmed.count > 1 {
+                if !isParsingTable {
+                    if !currentText.isEmpty {
+                        blocks.append(.text(currentText.trimmingCharacters(in: .whitespacesAndNewlines)))
+                        currentText = ""
+                    }
+                    isParsingTable = true
+                }
+                
+                let noSpaces = trimmed.replacingOccurrences(of: " ", with: "")
+                    .replacingOccurrences(of: "|", with: "")
+                    .replacingOccurrences(of: "-", with: "")
+                if noSpaces.isEmpty { continue }
+                
+                var columns = trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                if columns.first == "" { columns.removeFirst() }
+                if columns.last == "" { columns.removeLast() }
+                currentTable.append(columns)
+            } else {
+                if isParsingTable {
+                    blocks.append(.table(currentTable))
+                    currentTable = []
+                    isParsingTable = false
+                }
+                currentText += line + "\n"
+            }
+        }
+        
+        if isParsingTable {
+            blocks.append(.table(currentTable))
+        } else if !currentText.isEmpty {
+            blocks.append(.text(currentText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        
+        return blocks
     }
 }
 
