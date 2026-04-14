@@ -326,17 +326,37 @@ struct CustomMarkdownView: View {
             ForEach(0..<blocks.count, id: \.self) { index in
                 switch blocks[index] {
                 case .text(let content):
-                    // Regex cerdas: Pertahankan spasi awal (untuk sub-list), ubah * atau - menjadi •
-                    let cleaned = content.replacingOccurrences(of: "(?m)^([ \\t]*)[*\\-][ \\t]+", with: "$1• ", options: .regularExpression)
-                    
-                    // Menggunakan .inlineOnlyPreservingWhitespace mencegah Apple merusak margin rata kiri
-                    if let attrString = try? AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-                        Text(attrString)
-                            .font(.system(size: 16))
-                            .lineSpacing(4)
-                    } else {
-                        Text(content)
-                            .font(.system(size: 16))
+                    VStack(alignment: .leading, spacing: 6) {
+                        let lines = content.components(separatedBy: "\n")
+                        ForEach(0..<lines.count, id: \.self) { lIndex in
+                            let line = lines[lIndex]
+                            if let list = parseListItem(line) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text(list.symbol)
+                                        .font(.system(size: 16, weight: list.symbol == "•" ? .bold : .medium))
+                                    if let attrString = try? AttributedString(markdown: list.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                        Text(attrString)
+                                            .font(.system(size: 16))
+                                            .lineSpacing(4)
+                                    } else {
+                                        Text(list.text)
+                                            .font(.system(size: 16))
+                                            .lineSpacing(4)
+                                    }
+                                }
+                                .padding(.leading, CGFloat(list.indentSpaces) * 6)
+                            } else {
+                                if let attrString = try? AttributedString(markdown: line, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                    Text(attrString)
+                                        .font(.system(size: 16))
+                                        .lineSpacing(4)
+                                } else {
+                                    Text(line)
+                                        .font(.system(size: 16))
+                                        .lineSpacing(4)
+                                }
+                            }
+                        }
                     }
                 case .table(let rows):
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -351,14 +371,14 @@ struct CustomMarkdownView: View {
                                                 .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 8)
-                                                .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .frame(minWidth: 60, maxWidth: 250, maxHeight: .infinity, alignment: .topLeading)
                                                 .background(Color(.systemBackground))
                                         } else {
                                             Text(cellText)
                                                 .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 8)
-                                                .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .frame(minWidth: 60, maxWidth: 250, maxHeight: .infinity, alignment: .topLeading)
                                                 .background(Color(.systemBackground))
                                         }
                                     }
@@ -371,6 +391,35 @@ struct CustomMarkdownView: View {
                 }
             }
         }
+    }
+    
+    struct ListItem {
+        let symbol: String
+        let text: String
+        let indentSpaces: Int
+    }
+    
+    func parseListItem(_ line: String) -> ListItem? {
+        var spaces = 0
+        for char in line {
+            if char == " " || char == "\t" { spaces += 1 } else { break }
+        }
+        
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        
+        if trimmed.hasPrefix("* ") || trimmed.hasPrefix("- ") {
+            let textIdx = trimmed.index(trimmed.startIndex, offsetBy: 2)
+            return ListItem(symbol: "•", text: String(trimmed[textIdx...]), indentSpaces: spaces)
+        }
+        
+        if let spaceIdx = trimmed.firstIndex(of: " ") {
+            let prefix = String(trimmed[..<spaceIdx])
+            if prefix.hasSuffix(".") && Int(prefix.dropLast()) != nil {
+                let text = String(trimmed[trimmed.index(after: spaceIdx)...])
+                return ListItem(symbol: prefix, text: text, indentSpaces: spaces)
+            }
+        }
+        return nil
     }
     
     func parseMessageBlocks(_ text: String) -> [MessageBlock] {
