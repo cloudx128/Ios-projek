@@ -1,7 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import Foundation
-import MarkdownUI // Package tambahan untuk render markdown cerdas
 
 struct IPAFile: FileDocument {
     static var readableContentTypes: [UTType] = [.archive]
@@ -291,7 +290,6 @@ struct MessageBubble: View {
             if message.isUser { Spacer() }
             
             if message.isUser {
-                // Tampilan untuk pesan pengguna
                 Text(message.text)
                     .font(.system(size: 16))
                     .padding(.horizontal, 16)
@@ -301,15 +299,27 @@ struct MessageBubble: View {
                     .cornerRadius(20, corners: [.topLeft, .topRight, .bottomLeft])
                     .frame(maxWidth: 600, alignment: .trailing)
             } else {
-                // Tampilan untuk respons AI menggunakan MarkdownUI
-                Markdown(message.text)
-                    // Anda bisa menambahkan styling tabel atau blok kode secara spesifik nantinya jika perlu
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color(.systemGray5))
-                    .foregroundColor(.primary)
-                    .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
-                    .frame(maxWidth: 600, alignment: .leading)
+                // Gunakan Parser Markdown asli bawaan Apple
+                if let attrString = try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                    Text(attrString)
+                        .font(.system(size: 16))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
+                        .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
+                        .frame(maxWidth: 600, alignment: .leading)
+                } else {
+                    // Fallback jika formatting markdown gagal di-parsing
+                    Text(message.text)
+                        .font(.system(size: 16))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
+                        .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
+                        .frame(maxWidth: 600, alignment: .leading)
+                }
             }
             
             if !message.isUser { Spacer() }
