@@ -335,27 +335,37 @@ struct CustomMarkdownView: View {
                             if let list = parseListItem(line) {
                                 HStack(alignment: .top, spacing: 8) {
                                     Text(list.symbol)
-                                        .font(.system(size: 16, weight: list.symbol == "•" ? .bold : .medium))
+                                        .font(.system(size: 16, weight: list.symbol == "•" ? .bold : .regular))
+                                        .foregroundColor(Color.primary.opacity(0.8))
+                                        .frame(minWidth: list.symbol == "•" ? 14 : 24, alignment: .trailing) // Rata kanan supaya "9." dan "10." sejajar
+                                    
                                     if let attrString = try? AttributedString(markdown: list.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
                                         Text(attrString)
                                             .font(.system(size: 16))
                                             .lineSpacing(4)
+                                            .fixedSize(horizontal: false, vertical: true)
                                     } else {
                                         Text(list.text)
                                             .font(.system(size: 16))
                                             .lineSpacing(4)
+                                            .fixedSize(horizontal: false, vertical: true)
                                     }
                                 }
                                 .padding(.leading, CGFloat(list.indentSpaces) * 6)
+                                .padding(.bottom, 2) // Jarak antar list yang lebih elegan
                             } else {
                                 if let attrString = try? AttributedString(markdown: line, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
                                     Text(attrString)
                                         .font(.system(size: 16))
                                         .lineSpacing(4)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .padding(.bottom, 4) // Jarak antar paragraf
                                 } else {
                                     Text(line)
                                         .font(.system(size: 16))
                                         .lineSpacing(4)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .padding(.bottom, 4) // Jarak antar paragraf
                                 }
                             }
                         }
@@ -379,12 +389,13 @@ struct CustomMarkdownView: View {
                                             .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
-                                            // fixedSize memastikan tulisan yang kepanjangan membungkus ke baris baru, bukan menghilang (...)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                            .frame(maxWidth: 250, maxHeight: .infinity, alignment: .topLeading)
+                                            // Biarkan dia mengambil maksimum 250px tapi tingginya bebas menyentuh max HStack
+                                            .frame(minWidth: 60, maxWidth: 250, maxHeight: .infinity, alignment: .topLeading)
                                             .background(Color(.systemBackground))
                                     }
                                 }
+                                // FORMULA EMAS: HStack menghitung ideal size berdasarkan cell tertinggi, lalu memberi tahu semua cell untuk menyamakan tinggi
+                                .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         .background(Color.gray.opacity(0.3))
