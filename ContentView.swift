@@ -108,7 +108,7 @@ struct ContentView: View {
                     }
                     
                     ScrollViewReader { proxy in
-                        ScrollView {
+                        ScrollView(showsIndicators: false) {
                             LazyVStack(spacing: 16) {
                                 ForEach(messages) { message in
                                     MessageBubble(message: message)
@@ -186,7 +186,7 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("Gemini AI")
+                    Text("IPAW AI")
                         .font(.headline)
                         .onLongPressGesture(minimumDuration: 1.5) {
                             withAnimation {
@@ -326,16 +326,21 @@ struct CustomMarkdownView: View {
             ForEach(0..<blocks.count, id: \.self) { index in
                 switch blocks[index] {
                 case .text(let content):
-                    let cleaned = content.replacingOccurrences(of: "(?m)^[*\\-] ", with: "• ", options: .regularExpression)
-                    if let attrString = try? AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .full)) {
+                    // Regex cerdas: Pertahankan spasi awal (untuk sub-list), ubah * atau - menjadi •
+                    let cleaned = content.replacingOccurrences(of: "(?m)^([ \\t]*)[*\\-][ \\t]+", with: "$1• ", options: .regularExpression)
+                    
+                    // Menggunakan .inlineOnlyPreservingWhitespace mencegah Apple merusak margin rata kiri
+                    if let attrString = try? AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
                         Text(attrString)
                             .font(.system(size: 16))
+                            .lineSpacing(4)
                     } else {
                         Text(content)
                             .font(.system(size: 16))
                     }
                 case .table(let rows):
                     ScrollView(.horizontal, showsIndicators: false) {
+                        // Menggunakan VStack dan HStack sebagai pengganti Grid (Dukungan penuh untuk iOS 15+)
                         VStack(alignment: .leading, spacing: 1) {
                             ForEach(0..<rows.count, id: \.self) { rIndex in
                                 HStack(spacing: 1) {
@@ -361,8 +366,7 @@ struct CustomMarkdownView: View {
                             }
                         }
                         .background(Color.gray.opacity(0.3)) // Garis border tabel vertikal & horizontal
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                        .overlay(Rectangle().stroke(Color.gray.opacity(0.3), lineWidth: 1)) // Garis kaku tanpa lengkungan
                     }
                 }
             }
