@@ -336,9 +336,10 @@ struct CustomMarkdownView: View {
                     }
                 case .table(let rows):
                     ScrollView(.horizontal, showsIndicators: false) {
-                        Grid(alignment: .leading, horizontalSpacing: 1, verticalSpacing: 1) {
+                        // Menggunakan VStack dan HStack sebagai pengganti Grid (Dukungan penuh untuk iOS 15+)
+                        VStack(alignment: .leading, spacing: 1) {
                             ForEach(0..<rows.count, id: \.self) { rIndex in
-                                GridRow {
+                                HStack(spacing: 1) {
                                     ForEach(0..<rows[rIndex].count, id: \.self) { cIndex in
                                         let cellText = rows[rIndex][cIndex]
                                         if let attrString = try? AttributedString(markdown: cellText, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
@@ -346,21 +347,21 @@ struct CustomMarkdownView: View {
                                                 .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 8)
-                                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                                                 .background(Color(.systemBackground))
                                         } else {
                                             Text(cellText)
                                                 .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 8)
-                                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                                                 .background(Color(.systemBackground))
                                         }
                                     }
                                 }
                             }
                         }
-                        .background(Color.gray.opacity(0.3)) // Garis border grid
+                        .background(Color.gray.opacity(0.3)) // Garis border tabel vertikal & horizontal
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
                     }
