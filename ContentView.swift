@@ -299,31 +299,120 @@ struct MessageBubble: View {
                     .cornerRadius(20, corners: [.topLeft, .topRight, .bottomLeft])
                     .frame(maxWidth: 600, alignment: .trailing)
             } else {
-                // Gunakan Parser Markdown asli bawaan Apple
-                if let attrString = try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-                    Text(attrString)
-                        .font(.system(size: 16))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(.systemGray5))
-                        .foregroundColor(.primary)
-                        .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
-                        .frame(maxWidth: 600, alignment: .leading)
-                } else {
-                    // Fallback jika formatting markdown gagal di-parsing
-                    Text(message.text)
-                        .font(.system(size: 16))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(.systemGray5))
-                        .foregroundColor(.primary)
-                        .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
-                        .frame(maxWidth: 600, alignment: .leading)
-                }
+                CustomMarkdownView(text: message.text)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(.systemGray5))
+                    .foregroundColor(.primary)
+                    .cornerRadius(20, corners: [.topLeft, .topRight, .bottomRight])
+                    .frame(maxWidth: 600, alignment: .leading)
             }
             
             if !message.isUser { Spacer() }
         }
+    }
+}
+enum MessageBlock: Hashable {
+    case text(String)
+    case table([[String]])
+}
+
+struct CustomMarkdownView: View {
+    let text: String
+    
+    var body: some View {
+        let blocks = parseMessageBlocks(text)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(0..<blocks.count, id: \.self) { index in
+                switch blocks[index] {
+                case .text(let content):
+                    let cleaned = content.replacingOccurrences(of: "(?m)^[*\\-] ", with: "• ", options: .regularExpression)
+                    if let attrString = try? AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .full)) {
+                        Text(attrString)
+                            .font(.system(size: 16))
+                    } else {
+                        Text(content)
+                            .font(.system(size: 16))
+                    }
+                case .table(let rows):
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Grid(alignment: .leading, horizontalSpacing: 1, verticalSpacing: 1) {
+                            ForEach(0..<rows.count, id: \.self) { rIndex in
+                                GridRow {
+                                    ForEach(0..<rows[rIndex].count, id: \.self) { cIndex in
+                                        let cellText = rows[rIndex][cIndex]
+                                        if let attrString = try? AttributedString(markdown: cellText, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+                                            Text(attrString)
+                                                .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .background(Color(.systemBackground))
+                                        } else {
+                                            Text(cellText)
+                                                .font(.system(size: 14, weight: rIndex == 0 ? .semibold : .regular))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                                .background(Color(.systemBackground))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .background(Color.gray.opacity(0.3)) // Garis border grid
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                    }
+                }
+            }
+        }
+    }
+    
+    func parseMessageBlocks(_ text: String) -> [MessageBlock] {
+        var blocks: [MessageBlock] = []
+        let lines = text.components(separatedBy: "\n")
+        var currentText = ""
+        var currentTable: [[String]] = []
+        var isParsingTable = false
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("|") && trimmed.hasSuffix("|") && trimmed.count > 1 {
+                if !isParsingTable {
+                    if !currentText.isEmpty {
+                        blocks.append(.text(currentText.trimmingCharacters(in: .whitespacesAndNewlines)))
+                        currentText = ""
+                    }
+                    isParsingTable = true
+                }
+                
+                let noSpaces = trimmed.replacingOccurrences(of: " ", with: "")
+                    .replacingOccurrences(of: "|", with: "")
+                    .replacingOccurrences(of: "-", with: "")
+                if noSpaces.isEmpty { continue } // Lewati baris pemisah |---|---|
+                
+                var columns = trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                if columns.first == "" { columns.removeFirst() }
+                if columns.last == "" { columns.removeLast() }
+                currentTable.append(columns)
+            } else {
+                if isParsingTable {
+                    blocks.append(.table(currentTable))
+                    currentTable = []
+                    isParsingTable = false
+                }
+                currentText += line + "\n"
+            }
+        }
+        
+        if isParsingTable {
+            blocks.append(.table(currentTable))
+        } else if !currentText.isEmpty {
+            blocks.append(.text(currentText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        
+        return blocks
     }
 }
 
